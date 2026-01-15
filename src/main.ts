@@ -20,7 +20,9 @@ async function bootstrap() {
 
     whitelist: true, 
 
-    forbidNonWhitelisted: true 
+    forbidNonWhitelisted: true ,
+    transform: true, // แปลง payload เป็น class ตาม DTO 
+    transformOptions: { enableImplicitConversion: true },
 
   }));
 

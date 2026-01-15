@@ -1,30 +1,37 @@
 // src/products/products.module.ts 
 
-import { Module } from '@nestjs/common'; 
+import { Module } from '@nestjs/common';
 
-import { MongooseModule } from '@nestjs/mongoose'; 
+import { MongooseModule } from '@nestjs/mongoose';
 
-import { ProductsService } from './products.service'; 
+import { ProductsService } from './products.service';
 
-import { ProductsController } from './products.controller'; 
+import { ProductsController } from './products.controller';
 
-import { Product, ProductSchema } from './entities/product.entity'; 
-
- 
-
-@Module({ 
-
-  imports: [ 
+import { Product, ProductSchema } from './entities/product.entity';
+import { MulterModule } from '@nestjs/platform-express';
+import { multerConfigFactory } from '../common/utils/multer.config';
+import { PRODUCT_STORAGE_FOLDER, PRODUCT_IMAGE } from './products.constants';
 
 
-    MongooseModule.forFeature([{ name: Product.name, schema: ProductSchema }]), 
+@Module({
 
-  ], 
+  imports: [
 
-  controllers: [ProductsController], 
 
-  providers: [ProductsService], 
+    MongooseModule.forFeature([{ name: Product.name, schema: ProductSchema }]),
+    MulterModule.registerAsync(multerConfigFactory(PRODUCT_STORAGE_FOLDER,
+      {
+        maxSize: PRODUCT_IMAGE.MAX_SIZE,
+        allowedMimeTypes: PRODUCT_IMAGE.ALLOWED_MIME_TYPES,
+      })),
 
-}) 
+  ],
+
+  controllers: [ProductsController],
+
+  providers: [ProductsService],
+
+})
 
 export class ProductsModule { } 

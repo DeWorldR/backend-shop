@@ -1,22 +1,23 @@
 // src/products/dto/create-product.dto.ts 
-import { IsNotEmpty, IsString, IsNumber, Min, IsOptional, IsArray } from 'class-validator'; 
+import { IsNotEmpty, IsString, IsNumber, Min, IsOptional, IsArray } from 'class-validator';
+import { Type } from 'class-transformer';
+export class CreateProductDto {
+    @IsNotEmpty()
+    @IsString()
+    name: string;
 
-export class CreateProductDto { 
-    @IsNotEmpty() 
-    @IsString() 
-    name: string; 
+    @IsNotEmpty()
+    @IsNumber()
+    @Type(() => Number) // แปลงจาก form-data (string) เป็น number
+    @Min(0)
+    price: number;
 
-    @IsNotEmpty() 
-    @IsNumber() 
-    @Min(0) 
-    price: number; 
+    @IsOptional()
+    @IsString()
+    description?: string;
 
-    @IsOptional() 
-    @IsString() 
-    description?: string; 
-
-    @IsOptional() 
-    @IsArray()   
+    @IsOptional()
+    @IsArray()
     @IsString({ each: true })
-    colors?: string[]; 
+    colors?: string[];
 }

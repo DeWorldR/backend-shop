@@ -4,7 +4,7 @@ import { HydratedDocument } from 'mongoose';
 
 export type ProductDocument = HydratedDocument<Product>;
 
-@Schema({ 
+@Schema({
   timestamps: true, // สร้าง createdAt และ updatedAt ให้อัตโนมัติ
 })
 export class Product {
@@ -20,16 +20,9 @@ export class Product {
   // เก็บข้อมูลสีเป็น Array ของ String
   @Prop({ type: [String], default: [] })
   colors: string[];
+
+  @Prop() // เก็บเป็น String (Path ของไฟล์) เช่น 'uploads/xxx-xxx.jpg' 
+  imageUrl: string;
 }
 
 export const ProductSchema = SchemaFactory.createForClass(Product);
-
-ProductSchema.set('toJSON', {
-  virtuals: true,    
-  versionKey: false,  
-  transform: function (doc, ret: any) { 
-    delete ret._id;   
-  }
-});
-
-ProductSchema.set('toObject', { virtuals: true });
