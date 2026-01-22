@@ -1,174 +1,134 @@
 // src/products/products.service.ts 
 
 import { Injectable, NotFoundException, InternalServerErrorException } from '@nestjs/common';
-
 import { InjectModel } from '@nestjs/mongoose';
-
 import { Model } from 'mongoose';
-
 import { CreateProductDto } from './dto/create-product.dto';
-
 import { UpdateProductDto } from './dto/update-product.dto';
-
 import { Product } from './entities/product.entity';
-
 import type { Express } from 'express';
 import { safeUnlinkByRelativePath } from '../common/utils/file.utils';
 
-
 @Injectable()
-
 export class ProductsService {
 
+  // ฟังก์ชันแปลง Path ของไฟล์ให้เป็น Path สำหรับใช้งานผ่าน HTTP
   private toPublicImagePath(filePath: string): string {
-    const normalized = filePath.replace(/\\/g, '/'); // กัน Windows path
+    const normalized = filePath.replace(/\\/g, '/'); // ป้องกันปัญหา Windows path
     return normalized.replace(/^\.?\/?uploads\//, '').replace(/^uploads\//, '');
   }
 
-  // Inject Product Model เข้ามาใช้งาน โดยเก็บไว้ในตัวแปรชื่อ productModel 
-
   constructor(
-
     @InjectModel(Product.name) private productModel: Model<Product>,
-
   ) { }
 
-
-
   // --- สร้างสินค้า (Create) --- 
-
-  // async = ฟังก์ชันแบบอะซิงโครนัส เพื่อไม่ต้องรอการทำงานของ Database 
-
-  async create(dto: CreateProductDto, file?: Express.Multer.File) {
+  async create(dto: CreateProductDto, file?: Express.Multer.File): Promise<Product> {
     const diskPath = file?.path?.replace(/\\/g, '/'); // เช่น uploads/products/uuid.jpg
     const imageUrl = diskPath ? this.toPublicImagePath(diskPath) : undefined; // products/uuid.jpg
 
-    // สร้างอินสแตนซ์ของโมเดลด้วยข้อมูลจาก DTO (JSON) 
     try {
       return await this.productModel.create({
         ...dto,
         ...(imageUrl ? { imageUrl } : {}),
       });
     } catch (err) {
-      if (diskPath) await safeUnlinkByRelativePath(diskPath); // ลบ “disk path” เท่านั้น
+      // หากบันทึกลง Database ล้มเหลว ให้ลบไฟล์ที่เพิ่งอัปโหลดทิ้งทันที
+      if (diskPath) await safeUnlinkByRelativePath(diskPath); 
       throw new InternalServerErrorException('Create product failed');
     }
   }
 
-
-
-
   // --- ดึงข้อมูลทั้งหมด (Read All) --- 
-
-  // Promise = สัญญาว่าจะคืนค่าในอนาคต (หลังจากรอการทำงานของ Database เสร็จ) 
-
-  async findAll(): Promise < Product[] > {
-
-  // ใช้ .exec() เพื่อรันคำสั่ง Query และคืนค่า 
-
-  return this.productModel.find().exec();
-
-} 
-  async search(name ?: string, minPrice ?: number, maxPrice ?: number): Promise < Product[] > {
-  const filter: any = {};
-
-
-  if(name) {
-    filter.name = { $regex: name, $options: 'i' };
+  async findAll(): Promise<Product[]> {
+    return this.productModel.find().exec();
   }
 
-    
-    if(minPrice !== undefined || maxPrice !== undefined) {
-  filter.price = {};
-  if (minPrice !== undefined) filter.price.$gte = minPrice;
-  if (maxPrice !== undefined) filter.price.$lte = maxPrice;
-}
+  // --- ค้นหาสินค้า (Search) --- 
+  async search(name?: string, minPrice?: number, maxPrice?: number): Promise<Product[]> {
+    const filter: any = {};
 
+    if (name) {
+      filter.name = { $regex: name, $options: 'i' };
+    }
 
-return this.productModel
-  .find(filter)
-  .sort({ price: -1 })
-  .exec();
+    if (minPrice !== undefined || maxPrice !== undefined) {
+      filter.price = {};
+      if (minPrice !== undefined) filter.price.$gte = minPrice;
+      if (maxPrice !== undefined) filter.price.$lte = maxPrice;
+    }
+
+    return this.productModel
+      .find(filter)
+      .sort({ price: -1 })
+      .exec();
   }
-
-
 
   // --- ดึงข้อมูลรายตัว (Read One) --- 
+  async findOne(id: string): Promise<Product> {
+    const product = await this.productModel.findById(id).exec();
 
-  async findOne(id: string): Promise < Product > {
-
-  // await รอผลลัพธ์จากการค้นหาใน Database เพื่อเก็บลงตัวแปร product ไปตรวจสอบต่อ 
-
-  const product = await this.productModel.findById(id).exec();
-
-
-
-  // ดัก Error: ถ้าหาไม่เจอ ให้โยน Error 404 ออกไป 
-
-  if(!product) {
-
-    throw new NotFoundException(`Product with ID ${id} not found`);
-
-  }
-
+    if (!product) {
+      throw new NotFoundException(`Product with ID ${id} not found`);
+    }
     return product;
-
-}
-
-
+  }
 
   // --- แก้ไขข้อมูล (Update) --- 
+  async update(id: string, dto: UpdateProductDto, file?: Express.Multer.File): Promise<Product> {
+    // 1. ตรวจสอบก่อนว่ามีสินค้าชิ้นนี้อยู่จริงไหม (จะโยน 404 อัตโนมัติจาก findOne)
+    const existingProduct = await this.findOne(id); 
 
-  async update(id: string, updateProductDto: UpdateProductDto): Promise < Product > {
+    const diskPath = file?.path?.replace(/\\/g, '/');
+    const newImageUrl = diskPath ? this.toPublicImagePath(diskPath) : undefined;
 
-  const updatedProduct = await this.productModel
+    try {
+      const updateData = {
+        ...dto,
+        ...(newImageUrl ? { imageUrl: newImageUrl } : {}),
+      };
 
-    .findByIdAndUpdate(
+      // 2. ทำการอัปเดตข้อมูล
+      const updatedProduct = await this.productModel
+        .findByIdAndUpdate(id, updateData, { new: true })
+        .exec();
 
-      id,
+      // --- แก้ไข Error TS2322 ---
+      // เช็คว่า updatedProduct ไม่เป็น null เพื่อยืนยันกับ TypeScript
+      if (!updatedProduct) {
+        throw new NotFoundException(`Product with ID ${id} not found during update`);
+      }
 
-      updateProductDto,
+      if (newImageUrl && existingProduct.imageUrl) {
+        await safeUnlinkByRelativePath(`uploads/${existingProduct.imageUrl}`);
+      }
 
-      { new: true } // สำคัญ!: Option นี้บอกให้คืนค่าข้อมูล "ใหม่" หลังแก้แล้วกลับมา (ถ้าไม่ใส่จะได้ค่าเก่า) 
-
-    )
-
-    .exec();
-
-
-
-  // ดัก Error: ถ้าหาไม่เจอ 
-
-  if(!updatedProduct) {
-
-    throw new NotFoundException(`Product with ID ${id} not found`);
-
+      return updatedProduct;
+    } catch (err) {
+      // 4. กรณีเกิดข้อผิดพลาดในการอัปเดต ให้ลบรูปใหม่ที่เพิ่งอัปโหลดทิ้ง (Rollback)
+      if (diskPath) await safeUnlinkByRelativePath(diskPath);
+      
+      // ถ้าเป็น NotFoundException ให้ปล่อยผ่านไป แต่ถ้าเป็นอย่างอื่นให้โยน InternalServerError
+      if (err instanceof NotFoundException) throw err;
+      throw new InternalServerErrorException('Update product failed');
+    }
   }
-
-    return updatedProduct;
-
-}
-
-
 
   // --- ลบข้อมูล (Delete) --- 
+  async remove(id: string): Promise<Product> {
+    // ดึงข้อมูลมาดูก่อนเพื่อเอา imageUrl มาลบไฟล์
+    const product = await this.findOne(id);
+    
+    const deletedProduct = await this.productModel.findByIdAndDelete(id).exec();
 
-  async remove(id: string): Promise < Product > {
+    if (!deletedProduct) {
+      throw new NotFoundException(`Product with ID ${id} not found`);
+    }
 
-  const deletedProduct = await this.productModel.findByIdAndDelete(id).exec();
-
-
-
-  // ดัก Error: ถ้าหาไม่เจอ 
-
-  if(!deletedProduct) {
-
-    throw new NotFoundException(`Product with ID ${id} not found`);
-
-  }
+    if (deletedProduct.imageUrl) {
+      await safeUnlinkByRelativePath(`uploads/${deletedProduct.imageUrl}`);
+    }
 
     return deletedProduct;
-
+  }
 }
-
-} 

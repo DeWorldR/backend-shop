@@ -1,3 +1,4 @@
+//uuidv4
 import { MulterModuleAsyncOptions } from '@nestjs/platform-express'; import { diskStorage } from 'multer'; import { v4 as uuidv4 } from 'uuid'; import * as path from 'path'; import * as fs from 'fs'; import { BadRequestException } from '@nestjs/common'; interface MulterImageOptions { maxSize: number; allowedMimeTypes: string[]; } export const multerConfigFactory = (folderName: string, options: MulterImageOptions,): MulterModuleAsyncOptions => ({
     useFactory: async () => {
         const uploadRoot = process.env.UPLOAD_DEST || './uploads'; const uploadPath = path.join(uploadRoot, folderName); if (!fs.existsSync(uploadPath)) { fs.mkdirSync(uploadPath, { recursive: true }); } return {
